@@ -38,10 +38,7 @@ abstract contract OPStackKeystore is Keystore {
         /// @dev The Keystore storage proof on the master L2.
         StorageProof masterKeystoreProof;
         /// @dev The preimages of the OutputRoot.
-        PartialOutputRootPreimages partialOutputRootPreimages;
-        /// @dev The master L2 block header, encoded in RLP format.
-        ///      NOTE: Its hash is computed to complete the `partialOutputRootPreimages`.
-        bytes masterL2BlockHeaderRlp;
+        OutputRootPreimages outputRootPreimages;
     }
 
     /// @dev Struct regrouping the proofs to extract a storage value from an account.
@@ -54,14 +51,17 @@ abstract contract OPStackKeystore is Keystore {
     }
 
     /// @dev Struct representing the elements that are hashed together to generate an OutputRoot which itself
-    ///      represents a snapshot of the L2 state. NOTE: The `latestBlockhash` is missing and provided separately.
-    struct PartialOutputRootPreimages {
+    ///      represents a snapshot of the L2 state.
+    struct OutputRootPreimages {
         /// @dev Version of the output root.
         bytes32 version;
         /// @dev Root of the state trie at the block of this output.
         bytes32 stateRoot;
         /// @dev Root of the message passer storage trie.
         bytes32 messagePasserStorageRoot;
+        /// @dev The master L2 block header, encoded in RLP format.
+        ///      NOTE: Must be hashed before being used to recompute the OutputRoot.
+        bytes masterL2BlockHeaderRlp;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,20 +112,21 @@ abstract contract OPStackKeystore is Keystore {
         });
 
         // 3. Ensure the provided preimages of the `outputRoot` are valid.
-        //    NOTE: This is needed to verify the `proof.partialOutputRootPreimages.stateRoot` which is used as the root
+        //    NOTE: This is needed to verify the `proof.outputRootPreimages.stateRoot` which is used as the root
         //          to extract the config hash from the master L2.
-        BlockLib.BlockHeader memory masterl2BlockHeader = BlockLib.parseBlockHeader(proof.masterL2BlockHeaderRlp);
+        BlockLib.BlockHeader memory masterl2BlockHeader =
+            BlockLib.parseBlockHeader(proof.outputRootPreimages.masterL2BlockHeaderRlp);
         masterl2BlockTimestamp = masterl2BlockHeader.timestamp;
 
         _validateOutputRootPreimages({
-            partialOutputRootPreimages: proof.partialOutputRootPreimages,
+            outputRootPreimages: proof.outputRootPreimages,
             masterL2BlockHash: masterl2BlockHeader.hash,
             expectedOutputRoot: outputRoot
         });
 
         // 4. Extract the config hash stored in the Keystore on the master L2.
         (isSet, configHash) = StorageProofLib.extractAccountStorageValue({
-            stateRoot: proof.partialOutputRootPreimages.stateRoot,
+            stateRoot: proof.outputRootPreimages.stateRoot,
             account: address(this),
             accountProof: proof.masterKeystoreProof.accountProof,
             slot: keccak256(abi.encodePacked(MASTER_KEYSTORE_STORAGE_LOCATION)),
@@ -141,20 +142,20 @@ abstract contract OPStackKeystore is Keystore {
     ///
     /// @dev Reverts if the OutputRoot preimages values do not hash to the `expectedOutputRoot`.
     ///
-    /// @param partialOutputRootPreimages The `PartialOutputRootPreimages` struct.
+    /// @param outputRootPreimages The `OutputRootPreimages` struct.
     /// @param masterL2BlockHash The master L2 block hash (recomputed from a provided master block header).
     /// @param expectedOutputRoot The expected OutputRoot.
     function _validateOutputRootPreimages(
-        PartialOutputRootPreimages memory partialOutputRootPreimages,
+        OutputRootPreimages memory outputRootPreimages,
         bytes32 masterL2BlockHash,
         bytes32 expectedOutputRoot
     ) private pure {
         bytes32 recomputedOutputRoot = keccak256(
             abi.encodePacked(
-                partialOutputRootPreimages.version,
-                partialOutputRootPreimages.stateRoot,
+                outputRootPreimages.version,
+                outputRootPreimages.stateRoot,
                 masterL2BlockHash,
-                partialOutputRootPreimages.messagePasserStorageRoot
+                outputRootPreimages.messagePasserStorageRoot
             )
         );
 
