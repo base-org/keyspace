@@ -52,13 +52,12 @@ library EIP4788Lib {
     //                                        INTERNAL FUNCTIONS                                      //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Extracts the L1 state root (and corresponding L1 block timestamp) from a serialized `EIP4788Proof`.
+    /// @notice Extracts the L1 state root from a serialized `EIP4788Proof`.
     ///
     /// @param proof The serialized proof data.
     ///
-    /// @return l1BlockTimestamp The timestamp L1 block.
     /// @return l1StateRoot The L1 state root.
-    function verify(bytes memory proof) internal view returns (uint256 l1BlockTimestamp, bytes32 l1StateRoot) {
+    function verify(bytes memory proof) internal view returns (bytes32 l1StateRoot) {
         // Decode the `EIP4788Proof` proof.
         EIP4788Proof memory eip4788Proof = abi.decode(proof, (EIP4788Proof));
 
@@ -75,8 +74,7 @@ library EIP4788Lib {
             executionBlockHashProof: eip4788Proof.executionBlockHashProof
         });
 
-        // Return the verified L1 block timestamp and state root.
-        l1BlockTimestamp = l1BlockHeader.timestamp;
+        // Return the verified L1 state root.
         l1StateRoot = l1BlockHeader.stateRoot;
     }
 

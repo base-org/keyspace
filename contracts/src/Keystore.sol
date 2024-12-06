@@ -22,7 +22,7 @@ struct ReplicaKeystoreStorage {
     /// @dev The latest preconfirmed config nonce.
     uint256 currentConfigNonce;
     /// @dev The timestamp of the L1 block used to confirm the latest config.
-    uint256 confirmedConfigTimestamp;
+    uint256 masterBlockTimestamp;
     /// @dev Preconfirmed Keystore config hashes.
     ///      NOTE: The preconfirmed configs list can NEVER be empty because:
     ///         1. It is initialized in the `_initialize()` method.
@@ -65,12 +65,11 @@ abstract contract Keystore {
     /// @notice Thrown when the call is not performed on a replica chain.
     error NotOnReplicaChain();
 
-    /// @notice Thrown when trying to confirm a Keystore config but the extracted confirmed config hash, from the
-    ///         master chain, has a confirmation timestamp below the current confirmed config timestamp.
+    /// @notice Thrown when trying to confirm a Keystore config but the master block timestamp is below the current one.
     ///
-    /// @param currentConfirmedConfigTimestamp The current confirmed config timestamp.
-    /// @param newConfirmedConfigTimestamp The new confirmed config timestamp.
-    error ConfirmedConfigOutdated(uint256 currentConfirmedConfigTimestamp, uint256 newConfirmedConfigTimestamp);
+    /// @param currentMasterBlockTimestamp The current master block timestamp.
+    /// @param newMasterBlockTimestamp The new master block timestamp.
+    error ConfirmedConfigOutdated(uint256 currentMasterBlockTimestamp, uint256 newMasterBlockTimestamp);
 
     /// @notice Thrown when the provided new nonce is not strictly equal the current nonce incremented by one.
     ///
@@ -100,8 +99,8 @@ abstract contract Keystore {
     /// @notice Emitted when a Keystore config is confirmed on a replica chain.
     ///
     /// @param configHash The new config hash.
-    /// @param l1BlockTimestamp The timestamp of the L1 block associated with the proven config hash.
-    event KeystoreConfigConfirmed(bytes32 indexed configHash, uint256 indexed l1BlockTimestamp);
+    /// @param masterBlockTimestamp The timestamp of the master block associated with the proven config hash.
+    event KeystoreConfigConfirmed(bytes32 indexed configHash, uint256 indexed masterBlockTimestamp);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                           MODIFIERS                                            //
@@ -180,16 +179,16 @@ abstract contract Keystore {
         onlyOnReplicaChain
     {
         // Extract the new confirmed config hash from the provided `keystoreProof`.
-        (uint256 newConfirmedConfigTimestamp, bool isSet, bytes32 newConfirmedConfigHash) =
+        (uint256 newMasterBlockTimestamp, bool isSet, bytes32 newConfirmedConfigHash) =
             _extractConfigHashFromMasterChain(keystoreProof);
 
         // Ensure we are going forward when proving the new confirmed config hash.
-        uint256 confirmedConfigTimestamp = _sReplica().confirmedConfigTimestamp;
+        uint256 masterBlockTimestamp = _sReplica().masterBlockTimestamp;
         require(
-            newConfirmedConfigTimestamp > confirmedConfigTimestamp,
+            newMasterBlockTimestamp > masterBlockTimestamp,
             ConfirmedConfigOutdated({
-                currentConfirmedConfigTimestamp: confirmedConfigTimestamp,
-                newConfirmedConfigTimestamp: newConfirmedConfigTimestamp
+                currentMasterBlockTimestamp: masterBlockTimestamp,
+                newMasterBlockTimestamp: newMasterBlockTimestamp
             })
         );
 
@@ -207,7 +206,7 @@ abstract contract Keystore {
 
             // Store the new confirmed config in the Keystore internal storage.
             _sReplica().confirmedConfigHash = newConfirmedConfigHash;
-            _sReplica().confirmedConfigTimestamp = newConfirmedConfigTimestamp;
+            _sReplica().masterBlockTimestamp = newMasterBlockTimestamp;
 
             // Run the apply config hook logic if the preconfirmed configs list was reset.
             if (wasPreconfirmedListReset) {
@@ -215,14 +214,14 @@ abstract contract Keystore {
             }
         }
         // Otherwise, the config hash was not extracted from the master chain (because the Keystore is not old enough to
-        // be committed by the master L2 state root published on L1), so simply acknowledge the new L1 block timestamp
-        // and keep using the initial confirmed config hash (set in the `_initialize()` method).
+        // be committed by the master L2 state root published on L1), so simply acknowledge the new master block
+        // timestamp and keep using the initial confirmed config hash (set in the `_initialize()` method).
         else {
-            _sReplica().confirmedConfigTimestamp = newConfirmedConfigTimestamp;
+            _sReplica().masterBlockTimestamp = newMasterBlockTimestamp;
             newConfirmedConfigHash = _sReplica().confirmedConfigHash;
         }
 
-        emit KeystoreConfigConfirmed({configHash: newConfirmedConfigHash, l1BlockTimestamp: newConfirmedConfigTimestamp});
+        emit KeystoreConfigConfirmed({configHash: newConfirmedConfigHash, masterBlockTimestamp: newMasterBlockTimestamp});
     }
 
     /// @notice Hook triggered right after the Keystore config has been updated.
@@ -254,14 +253,14 @@ abstract contract Keystore {
     ///
     /// @param keystoreProof The proof data used to extract the Keystore config hash on the master chain.
     ///
-    /// @return l1BlockTimestamp The timestamp of the L1 block associated with the proven config hash.
+    /// @return masterBlockTimestamp The timestamp of the master block associated with the proven config hash.
     /// @return isSet Whether the config hash is set or not.
     /// @return configHash The config hash extracted from the Keystore on the master chain.
     function _extractConfigHashFromMasterChain(bytes calldata keystoreProof)
         internal
         view
         virtual
-        returns (uint256 l1BlockTimestamp, bool isSet, bytes32 configHash);
+        returns (uint256 masterBlockTimestamp, bool isSet, bytes32 configHash);
 
     /// @notice Hook triggered right before updating the Keystore config.
     ///
@@ -334,7 +333,7 @@ abstract contract Keystore {
         }
 
         // On replica chains, enforce eventual consistency.
-        uint256 validUntil = _sReplica().confirmedConfigTimestamp + _eventualConsistencyWindow();
+        uint256 validUntil = _sReplica().masterBlockTimestamp + _eventualConsistencyWindow();
         require(block.timestamp <= validUntil, ConfirmedConfigTooOld());
     }
 

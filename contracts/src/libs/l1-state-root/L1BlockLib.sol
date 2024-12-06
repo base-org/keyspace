@@ -39,8 +39,8 @@ library L1BlockLib {
     struct L1BlockProof {
         /// @dev The L1 block header to verify, encoded in RLP format.
         bytes l1BlockHeaderRlp;
-        /// @dev The L2 block header, encoded in RLP format.
-        bytes l2BlockHeaderRlp;
+        /// @dev A recent L2 block header (off the replica chain), encoded in RLP format.
+        bytes recentl2BlockHeaderRlp;
         /// @dev The Merkle proof for the L1Block oracle account on the L2 chain.
         bytes[] l1BlockAccountProof;
         /// @dev The Merkle proof for the L1 block hash storage slot in the L1Block oracle account.
@@ -51,36 +51,35 @@ library L1BlockLib {
     //                                        INTERNAL FUNCTIONS                                      //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Extracts the L1 state root (and corresponding L1 block timestamp) from a serialized `L1BlockProof`.
+    /// @notice Extracts the L1 state root from a serialized `L1BlockProof`.
     ///
     /// @param proof The serialized proof data.
     ///
-    /// @return l1BlockTimestamp The timestamp L1 block.
     /// @return l1StateRoot The L1 state root.
-    function verify(bytes memory proof) internal view returns (uint256 l1BlockTimestamp, bytes32 l1StateRoot) {
+    function verify(bytes memory proof) internal view returns (bytes32 l1StateRoot) {
         // Decode the `L1BlockProof` proof.
         L1BlockProof memory l1BlockProof = abi.decode(proof, (L1BlockProof));
 
         // Parse the L1 block header from the provided RLP data.
         BlockLib.BlockHeader memory l1BlockHeader = BlockLib.parseBlockHeader(l1BlockProof.l1BlockHeaderRlp);
 
-        // Parse the L2 block header from the provided RLP data.
-        BlockLib.BlockHeader memory l2BlockHeader = BlockLib.parseBlockHeader(l1BlockProof.l2BlockHeaderRlp);
+        // Parse the recent replica L2 block header from the provided RLP data.
+        BlockLib.BlockHeader memory recentl2BlockHeader = BlockLib.parseBlockHeader(l1BlockProof.recentl2BlockHeaderRlp);
 
-        // Retrieve the block hash for the specified L2 block number using `blockhash`.
-        bytes32 blockHash = blockhash(l2BlockHeader.number);
+        // Retrieve the block hash for the specified replica L2 block number using `blockhash`.
+        bytes32 blockHash = blockhash(recentl2BlockHeader.number);
 
-        // Verify that the L2 block header hash matches the retrieved block hash.
-        // NOTE: Because blockHeader.hash is guaranteed to not be 0, this also ensure that the provided
-        //       `blockHeader.number` is not too old.
+        // Verify that the recent replica L2 block header hash matches the retrieved block hash.
+        // NOTE: Because `recentl2BlockHeader.hash` is guaranteed to not be 0, this also ensure that the provided
+        //       `recentl2BlockHeader.number` is not too old.
         require(
-            blockHash == l2BlockHeader.hash,
-            InvalidL2BlockHeader({blockHeaderHash: l2BlockHeader.hash, blockHash: blockHash})
+            blockHash == recentl2BlockHeader.hash,
+            InvalidL2BlockHeader({blockHeaderHash: recentl2BlockHeader.hash, blockHash: blockHash})
         );
 
-        // Extract the L1 block hash from the L2 state root using the provided account and storage proofs.
+        // Extract the `L1block` hash slot value from the recent replica L2 state root.
         (, bytes32 l1Blockhash) = StorageProofLib.extractAccountStorageValue({
-            stateRoot: l2BlockHeader.stateRoot,
+            stateRoot: recentl2BlockHeader.stateRoot,
             account: L1BLOCK_PREDEPLOY_ADDRESS,
             accountProof: l1BlockProof.l1BlockAccountProof,
             slot: L1BLOCK_HASH_SLOT,
@@ -93,8 +92,7 @@ library L1BlockLib {
             L1BlockHashMismatch({l1Blockhash: l1Blockhash, expectedL1BlockHash: l1BlockHeader.hash})
         );
 
-        // Return the verified L1 block timestamp and state root.
-        l1BlockTimestamp = l1BlockHeader.timestamp;
+        // Return the verified L1 state root.
         l1StateRoot = l1BlockHeader.stateRoot;
     }
 }

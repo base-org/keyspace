@@ -4,26 +4,6 @@ pragma solidity ^0.8.27;
 import {Keystore} from "../Keystore.sol";
 import {BlockLib, L1StateRootLib, StorageProofLib} from "../KeystoreLibs.sol";
 
-/// @dev OPStack specfic proof used to verify a master L2 state root.
-struct OPStackProof {
-    /// @dev The L1 state root proof.
-    L1StateRootLib.L1StateRootProof l1StateRootProof;
-    /// @dev The Keystore account proof on the master chain.
-    bytes[] masterKeystoreAccountProof;
-    /// @dev The Keystore storage proof on the master chain.
-    bytes[] masterKeystoreStorageProof;
-    /// @dev The `AnchorStateRegistry` account proof on L1.
-    bytes[] anchorStateRegistryAccountProof;
-    /// @dev The storage proof of the master L2 OutputRoot stored in the `AnchorStateRegistry` contract on L1.
-    bytes[] anchorStateRegistryStorageProof;
-    /// @dev The preimages prefix to compute the master L2 OutputRoot.
-    bytes outputRootPreimagesPrefix;
-    /// @dev The state root of the master L2.
-    bytes32 l2StateRoot;
-    /// @dev The preimages suffix to compute the master L2 OutputRoot.
-    bytes outputRootPreimagesSuffix;
-}
-
 abstract contract OPStackKeystore is Keystore {
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                           CONSTANTS                                            //
@@ -46,6 +26,45 @@ abstract contract OPStackKeystore is Keystore {
     error InvalidL2OutputRootPreimages();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                            STRUCTURES                                          //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// @dev Proof used to extract a Keystore config hash from an OPStack master L2.
+    struct OPStackProof {
+        /// @dev The L1 state root proof.
+        L1StateRootLib.L1StateRootProof l1StateRootProof;
+        /// @dev The `AnchorStateRegistry` storage proof on L1.
+        StorageProof anchorStateRegistryProof;
+        /// @dev The Keystore storage proof on the master L2.
+        StorageProof masterKeystoreProof;
+        /// @dev The preimages of the OutputRoot.
+        PartialOutputRootPreimages partialOutputRootPreimages;
+        /// @dev The master L2 block header, encoded in RLP format.
+        ///      NOTE: Its hash is computed to complete the `partialOutputRootPreimages`.
+        bytes masterL2BlockHeaderRlp;
+    }
+
+    /// @dev Struct regrouping the proofs to extract a storage value from an account.
+    struct StorageProof {
+        /// @dev The account proof to from wich the account storage root is extracted.
+        bytes[] accountProof;
+        /// @dev The storage proof (rooted against the extracted account storage), from which the slot value can be
+        ///      extracted.
+        bytes[] storageProof;
+    }
+
+    /// @dev Struct representing the elements that are hashed together to generate an OutputRoot which itself
+    ///      represents a snapshot of the L2 state. NOTE: The `latestBlockhash` is missing and provided separately.
+    struct PartialOutputRootPreimages {
+        /// @dev Version of the output root.
+        bytes32 version;
+        /// @dev Root of the state trie at the block of this output.
+        bytes32 stateRoot;
+        /// @dev Root of the message passer storage trie.
+        bytes32 messagePasserStorageRoot;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                          CONSTRUCTOR                                           //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -57,8 +76,8 @@ abstract contract OPStackKeystore is Keystore {
 
     /// @inheritdoc Keystore
     ///
-    /// @dev The following proving steps are performed to extract a Keystore config hash from the master chain:
-    ///      1. Extract the L1 state root (and corresponding L1 block timestamp) from a generic L1 state root proof.
+    /// @dev The following proving steps are performed to extract a Keystore config hash from the OPStack master L2:
+    ///      1. Extract the L1 state root from a generic L1 state root proof.
     ///
     ///      2. From the L1 state root hash (within the `l1BlockHeader`), prove the storage root of the
     ///         `AnchorStateRegistry` contract on L1 and then prove the L2 OutputRoot stored at slot
@@ -70,50 +89,47 @@ abstract contract OPStackKeystore is Keystore {
     ///         parameters. For more details, see the link:
     ///         https://github.com/ethereum-optimism/optimism/blob/d141b53e4f52a8eb96a552d46c2e1c6c068b032e/op-service/eth/output.go#L49-L63
     ///
-    ///      4. From the master chain `l2StateRoot`, prove the Keystore storage root and prove the stored config hash.
-    ///
-    /// @param keystoreProof The proof required to extract the Keystore config hash.
-    ///
-    /// @return l1BlockTimestamp The timestamp of the L1 block associated with the proven config hash.
-    /// @return isSet Whether the config hash is set or not.
-    /// @return configHash The config hash extracted from the Keystore on the master chain.
+    ///      4. From the master `l2StateRoot`, prove the Keystore storage root and prove the stored config hash.
     function _extractConfigHashFromMasterChain(bytes calldata keystoreProof)
         internal
         view
         override
-        returns (uint256 l1BlockTimestamp, bool isSet, bytes32 configHash)
+        returns (uint256 masterl2BlockTimestamp, bool isSet, bytes32 configHash)
     {
         // Decode the `OPStackProof`.
         OPStackProof memory proof = abi.decode(keystoreProof, (OPStackProof));
 
-        // 1. Extract the L1 state root (and corresponding timestamp) from a generic L1 state root proof.
-        bytes32 l1StateRoot;
-        (l1BlockTimestamp, l1StateRoot) = L1StateRootLib.verify({proof: proof.l1StateRootProof});
+        // 1. Extract the L1 state root from a generic L1 state root proof.
+        bytes32 l1StateRoot = L1StateRootLib.verify({proof: proof.l1StateRootProof});
 
         // 2. Extract the OutputRoot that was submitted to the `AnchorStateRegistry` contract on L1.
         (, bytes32 outputRoot) = StorageProofLib.extractAccountStorageValue({
             stateRoot: l1StateRoot,
             account: ANCHOR_STATE_REGISTRY_ADDR,
-            accountProof: proof.anchorStateRegistryAccountProof,
+            accountProof: proof.anchorStateRegistryProof.accountProof,
             slot: ANCHOR_STATE_REGISTRY_SLOT,
-            storageProof: proof.anchorStateRegistryStorageProof
+            storageProof: proof.anchorStateRegistryProof.storageProof
         });
 
         // 3. Ensure the provided preimages of the `outputRoot` are valid.
+        //    NOTE: This is needed to verify the `proof.partialOutputRootPreimages.stateRoot` which is used as the root
+        //          to extract the config hash from the master L2.
+        BlockLib.BlockHeader memory masterl2BlockHeader = BlockLib.parseBlockHeader(proof.masterL2BlockHeaderRlp);
+        masterl2BlockTimestamp = masterl2BlockHeader.timestamp;
+
         _validateOutputRootPreimages({
-            prefix: proof.outputRootPreimagesPrefix,
-            masterL2StateRoot: proof.l2StateRoot,
-            suffix: proof.outputRootPreimagesSuffix,
-            outputRoot: outputRoot
+            partialOutputRootPreimages: proof.partialOutputRootPreimages,
+            masterL2BlockHash: masterl2BlockHeader.hash,
+            expectedOutputRoot: outputRoot
         });
 
-        // 4. Extract the config hash stored in the Keystore on the master chain.
+        // 4. Extract the config hash stored in the Keystore on the master L2.
         (isSet, configHash) = StorageProofLib.extractAccountStorageValue({
-            stateRoot: proof.l2StateRoot,
+            stateRoot: proof.partialOutputRootPreimages.stateRoot,
             account: address(this),
-            accountProof: proof.masterKeystoreAccountProof,
+            accountProof: proof.masterKeystoreProof.accountProof,
             slot: keccak256(abi.encodePacked(MASTER_KEYSTORE_STORAGE_LOCATION)),
-            storageProof: proof.masterKeystoreStorageProof
+            storageProof: proof.masterKeystoreProof.storageProof
         });
     }
 
@@ -121,22 +137,27 @@ abstract contract OPStackKeystore is Keystore {
     //                                        PRIVATE FUNCTIONS                                       //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Ensures the proof's preimages values correctly hash to the expected `outputRoot`.
+    /// @notice Ensures the OutputRoot preimages values correctly hash to the `expectedOutputRoot`.
     ///
-    /// @dev Reverts if the proof's preimages values do not hash to the expected `outputRoot`.
+    /// @dev Reverts if the OutputRoot preimages values do not hash to the `expectedOutputRoot`.
     ///
-    /// @param prefix The `outputRoot` preimages prefix.
-    /// @param masterL2StateRoot The master L2 state root.
-    /// @param suffix The `outputRoot` preimages suffix.
-    /// @param outputRoot The L2 OutputRoot to validate.
+    /// @param partialOutputRootPreimages The `PartialOutputRootPreimages` struct.
+    /// @param masterL2BlockHash The master L2 block hash (recomputed from a provided master block header).
+    /// @param expectedOutputRoot The expected OutputRoot.
     function _validateOutputRootPreimages(
-        bytes memory prefix,
-        bytes32 masterL2StateRoot,
-        bytes memory suffix,
-        bytes32 outputRoot
+        PartialOutputRootPreimages memory partialOutputRootPreimages,
+        bytes32 masterL2BlockHash,
+        bytes32 expectedOutputRoot
     ) private pure {
-        bytes32 recomputedOutputRoot = keccak256(abi.encodePacked(prefix, masterL2StateRoot, suffix));
+        bytes32 recomputedOutputRoot = keccak256(
+            abi.encodePacked(
+                partialOutputRootPreimages.version,
+                partialOutputRootPreimages.stateRoot,
+                masterL2BlockHash,
+                partialOutputRootPreimages.messagePasserStorageRoot
+            )
+        );
 
-        require(recomputedOutputRoot == outputRoot, InvalidL2OutputRootPreimages());
+        require(recomputedOutputRoot == expectedOutputRoot, InvalidL2OutputRootPreimages());
     }
 }

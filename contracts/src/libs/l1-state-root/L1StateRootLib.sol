@@ -9,7 +9,8 @@ library L1StateRootLib {
     //                                              ERRORS                                            //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Thrown when an unsupported proof type is provided in an L1 state root proof.
+    /// @notice Thrown when an unsupported L1 state root proofproof type is provided in an L1 state root
+    /// proof.
     ///
     /// @param proofType The invalid proof type that caused the error.
     error InvalidProofType(uint8 proofType);
@@ -36,17 +37,12 @@ library L1StateRootLib {
     //                                        INTERNAL FUNCTIONS                                      //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Verifies a generic L1 state root proof and extracts the L1 state root and its corresponding timestamp.
+    /// @notice Extracts a L1 state root from a generic proof.
     ///
-    /// @param proof The generic L1 state root proof to verify.
+    /// @param proof The generic state root proof to verify.
     ///
-    /// @return l1BlockTimestamp The timestamp of the L1 block or root.
     /// @return l1StateRoot The verified L1 state root.
-    function verify(L1StateRootProof memory proof)
-        internal
-        view
-        returns (uint256 l1BlockTimestamp, bytes32 l1StateRoot)
-    {
+    function verify(L1StateRootProof memory proof) internal view returns (bytes32 l1StateRoot) {
         if (proof.type_ == L1StateRootProofType.FromL1Block) {
             return L1BlockLib.verify(proof.data);
         }
