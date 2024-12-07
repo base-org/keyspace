@@ -149,7 +149,7 @@ contract MultiOwnableWallet is OPStackKeystore, ERC1271, TransientUUPSUpgradeabl
     ///
     /// @param config The initial Keystore config.
     function initialize(ConfigLib.Config calldata config) external {
-        _initialize(config);
+        _initializeKeystore(config);
     }
 
     /// @inheritdoc IAccount
