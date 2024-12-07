@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {Keystore} from "../Keystore.sol";
-import {BlockLib, L1StateRootLib, StorageProofLib} from "../KeystoreLibs.sol";
+import {BlockLib, L1StateRootLib, StorageProofLib, UnsafeKeystoreStorageLib} from "../KeystoreLibs.sol";
 
 abstract contract OPStackKeystore is Keystore {
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,7 +129,7 @@ abstract contract OPStackKeystore is Keystore {
             stateRoot: proof.outputRootPreimages.stateRoot,
             account: address(this),
             accountProof: proof.masterKeystoreProof.accountProof,
-            slot: keccak256(abi.encodePacked(MASTER_KEYSTORE_STORAGE_LOCATION)),
+            slot: keccak256(abi.encodePacked(UnsafeKeystoreStorageLib.MASTER_KEYSTORE_STORAGE_LOCATION)),
             storageProof: proof.masterKeystoreProof.storageProof
         });
     }

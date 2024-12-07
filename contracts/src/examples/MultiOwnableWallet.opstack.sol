@@ -6,10 +6,9 @@ import {UserOperation} from "aa/interfaces/UserOperation.sol";
 import {Receiver} from "solady/accounts/Receiver.sol";
 import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
 
-import {OPStackKeystore} from "../chains/OPStackKeystore.sol";
-
-import {Keystore} from "../Keystore.sol";
-import {ConfigLib} from "../KeystoreLibs.sol";
+import {Keystore} from "../core/Keystore.sol";
+import {ConfigLib} from "../core/KeystoreLibs.sol";
+import {OPStackKeystore} from "../core/chains/OPStackKeystore.sol";
 
 import {ERC1271} from "./ERC1271.sol";
 import {TransientUUPSUpgradeable} from "./TransientUUPSUpgradeable.sol";
@@ -149,7 +148,7 @@ contract MultiOwnableWallet is OPStackKeystore, ERC1271, TransientUUPSUpgradeabl
     ///
     /// @param config The initial Keystore config.
     function initialize(ConfigLib.Config calldata config) external {
-        _initialize(config);
+        _initializeKeystore(config);
     }
 
     /// @inheritdoc IAccount
@@ -210,7 +209,7 @@ contract MultiOwnableWallet is OPStackKeystore, ERC1271, TransientUUPSUpgradeabl
     {
         // NOTE: Because this hook is limited to a view function, no special access control logic is required.
 
-        bytes32 newConfigHash = ConfigLib.hash(newConfig);
+        bytes32 newConfigHash = ConfigLib.hash({config: newConfig, account: address(this)});
         (, bytes memory signatureUpdate) = abi.decode(validationProof, (bytes, bytes));
         (uint256 sigUpdateSignerIndex, bytes memory signature) = abi.decode(signatureUpdate, (uint256, bytes));
 
@@ -259,7 +258,7 @@ contract MultiOwnableWallet is OPStackKeystore, ERC1271, TransientUUPSUpgradeabl
         override
         returns (bool)
     {
-        bytes32 newConfigHash = ConfigLib.hash(newConfig);
+        bytes32 newConfigHash = ConfigLib.hash({config: newConfig, account: address(this)});
         (bytes memory signatureAuth,) = abi.decode(authorizationProof, (bytes, bytes));
 
         // Ensure the update is authorized.
@@ -288,7 +287,7 @@ contract MultiOwnableWallet is OPStackKeystore, ERC1271, TransientUUPSUpgradeabl
 
         // Otherwise set the new signers.
         (, address[] memory signers) = abi.decode(newConfig.data, (address, address[]));
-        bytes32 configHash = ConfigLib.hash(newConfig);
+        bytes32 configHash = ConfigLib.hash({config: newConfig, account: address(this)});
         mapping(address signer => bool isSigner) storage signers_ = _sWallet().keystoreConfig[configHash].signers;
         for (uint256 i; i < signers.length; i++) {
             signers_[signers[i]] = true;
