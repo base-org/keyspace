@@ -19,6 +19,21 @@ abstract contract OPStackKeystoreWithdrawable is Keystore {
     uint32 constant MIN_GAS_LIMIT = 100_000;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
+    //                                              ERRORS                                            //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Thrown when the transaction sender is not the expected CrossDomainMessenger.
+    ///
+    /// @param sender The actual sender of the transaction.
+    /// @param xDomainMessenger The expected CrossDomainMessenger address.
+    error TxSenderIsNotCrossDomainMessenger(address sender, address xDomainMessenger);
+
+    /// @notice Thrown when the message sender is not this contract during cross-chain message execution.
+    ///
+    /// @param msgSender The actual sender of the cross-domain message.
+    error MessageSenderIsNotThisContract(address msgSender);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                        INTERNAL FUNCTIONS                                      //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -48,15 +63,15 @@ abstract contract OPStackKeystoreWithdrawable is Keystore {
         onlyOnReplicaChain
     {
         // Ensure the tx sender is the expected CrossDomainMessenger.
-        address xDomainMessageSender =
-            block.chainid == 1 ? L1_CROSS_DOMAIN_MESSENGER : Predeploys.L2_CROSS_DOMAIN_MESSENGER;
-        require(msg.sender == xDomainMessageSender, "TxSenderIsNotCrossDomainMessenger");
+        address xDomainMessenger = block.chainid == 1 ? L1_CROSS_DOMAIN_MESSENGER : Predeploys.L2_CROSS_DOMAIN_MESSENGER;
+        require(
+            msg.sender == xDomainMessenger,
+            TxSenderIsNotCrossDomainMessenger({sender: msg.sender, xDomainMessenger: xDomainMessenger})
+        );
 
         // Ensure the message originates from this contract.
-        require(
-            ICrossDomainMessenger(xDomainMessageSender).xDomainMessageSender() == address(this),
-            "MessageSenderIsNotThisContract"
-        );
+        address xDomainMessageSender = ICrossDomainMessenger(xDomainMessenger).xDomainMessageSender();
+        require(xDomainMessageSender == address(this), MessageSenderIsNotThisContract(xDomainMessageSender));
 
         // Ensure we are going forward when confirming a new config.
         (, uint256 masterBlockTimestamp) = _confirmedConfigHash();
