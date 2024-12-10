@@ -5,8 +5,8 @@ import {Test, Vm, console} from "forge-std/Test.sol";
 
 import {SignatureCheckerLib} from "solady/utils/SignatureCheckerLib.sol";
 
-import {Keystore} from "../src/Keystore.sol";
-import {ConfigLib} from "../src/KeystoreLibs.sol";
+import {Keystore} from "../src/core/Keystore.sol";
+import {ConfigLib} from "../src/core/KeystoreLibs.sol";
 
 import {MultiOwnableWallet} from "../src/examples/MultiOwnableWallet.opstack.sol";
 import {MultiOwnableWalletFactory} from "../src/examples/MultiOwnableWalletFactory.opstack.sol";

@@ -34,11 +34,12 @@ library ConfigLib {
     ///
     /// @dev Reverts if the parameters hashes do not match.
     ///
-    /// @param configHash The Keystore config hash.
     /// @param config The Keystore config.
-    function verify(bytes32 configHash, Config calldata config) internal view {
+    /// @param account The account address.
+    /// @param configHash The Keystore config hash.
+    function verify(Config calldata config, address account, bytes32 configHash) internal pure {
         // Ensure the recomputed config hash matches witht the given `configHash` parameter.
-        bytes32 recomputedConfigHash = hash(config);
+        bytes32 recomputedConfigHash = hash({config: config, account: account});
 
         require(
             recomputedConfigHash == configHash,
@@ -46,15 +47,16 @@ library ConfigLib {
         );
     }
 
-    /// @notice Computed the hash of the provided `config`.
+    /// @notice Computes the hash of the provided `config`.
     ///
-    /// @dev To avoid replay of similar configs on different wallets with the same signers, the wallet address is also
-    ///      part of the hashed data.
+    /// @dev To avoid replay of similar config signatures on different wallets with the same signers, the account
+    ///      address is also hashed with the config.
     ///
     /// @param config The Keystore config.
+    /// @param account The account address.
     ///
     /// @return The corresponding config hash.
-    function hash(Config calldata config) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(address(this), config.nonce, config.data));
+    function hash(Config calldata config, address account) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(account, config.nonce, config.data));
     }
 }

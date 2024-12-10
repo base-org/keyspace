@@ -116,7 +116,7 @@ abstract contract Keystore {
     //                                          CONSTRUCTOR                                           //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Creates the Keystore.
+    /// @notice Constructor.
     ///
     /// @param masterChainId_ The master chain id.
     constructor(uint256 masterChainId_) {
@@ -196,7 +196,7 @@ abstract contract Keystore {
         // confirmation flow.
         if (isSet) {
             // Ensure the `newConfirmedConfig` matches with the extracted `newConfirmedConfigHash`.
-            ConfigLib.verify({configHash: newConfirmedConfigHash, config: newConfirmedConfig});
+            ConfigLib.verify({config: newConfirmedConfig, account: address(this), configHash: newConfirmedConfigHash});
 
             _applyNewConfirmedConfig({
                 newConfirmedConfigHash: newConfirmedConfigHash,
@@ -324,7 +324,7 @@ abstract contract Keystore {
         require(config.nonce == 0, InitialNonceIsNotZero());
 
         // Initialize the internal Keystore storage.
-        bytes32 configHash = ConfigLib.hash(config);
+        bytes32 configHash = ConfigLib.hash({config: config, account: address(this)});
         if (block.chainid == masterChainId) {
             require(_sMaster().configHash == 0, KeystoreAlreadyInitialized());
             _sMaster().configHash = configHash;
@@ -394,7 +394,7 @@ abstract contract Keystore {
     ///
     /// @return The new config hash.
     function _applyMasterConfig(ConfigLib.Config calldata newConfig) private returns (bytes32) {
-        bytes32 newConfigHash = ConfigLib.hash(newConfig);
+        bytes32 newConfigHash = ConfigLib.hash({config: newConfig, account: address(this)});
         _sMaster().configHash = newConfigHash;
         _sMaster().configNonce = newConfig.nonce;
 
@@ -407,7 +407,7 @@ abstract contract Keystore {
     ///
     /// @return The new config hash.
     function _applyReplicaConfig(ConfigLib.Config calldata newConfig) private returns (bytes32) {
-        bytes32 newConfigHash = ConfigLib.hash(newConfig);
+        bytes32 newConfigHash = ConfigLib.hash({config: newConfig, account: address(this)});
         _setPreconfirmedConfig({preconfirmedConfigHash: newConfigHash, preconfirmedConfigNonce: newConfig.nonce});
 
         return newConfigHash;
