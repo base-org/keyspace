@@ -24,18 +24,18 @@ contract KeystoreArbitrumPortal is ReceiverAliasedAddress {
     //                                        PUBLIC FUNCTIONS                                        //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Sends the Keystore tree state root to Arbitrum.
+    /// @notice Sends the Keystore tree root to Arbitrum.
     ///
-    /// @param chainid The chain id key to look up the Keystore state root to send. If `chainid` is 0, the local state
-    ///                root is sent.
+    /// @param chainid The chain id key to look up the Keystore tree root to send. If `chainid` is 0, the local Keystore
+    ///                tree root is sent.
     /// @param maxSubmissionCost The maximum cost of submitting the retryable ticket.
     /// @param gasLimit The gas limit for the retryable ticket on L2.
     /// @param maxFeePerGas The maximum fee per gas for the retryable ticket.
     function sendToArbitrum(uint256 chainid, uint256 maxSubmissionCost, uint256 gasLimit, uint256 maxFeePerGas)
         external
     {
-        (uint256 originChainid, bytes32 stateRoot) =
-            chainid == 0 ? (block.chainid, localStateRoot()) : (chainid, receivedStateRoots[chainid]);
+        (uint256 originChainid, bytes32 treeRoot) =
+            chainid == 0 ? (block.chainid, localTreeRoot()) : (chainid, receivedTreeRoots[chainid]);
 
         IInbox(ARBITRUM_INBOX).createRetryableTicket({
             to: address(this),
@@ -45,29 +45,28 @@ contract KeystoreArbitrumPortal is ReceiverAliasedAddress {
             callValueRefundAddress: msg.sender,
             gasLimit: gasLimit,
             maxFeePerGas: maxFeePerGas,
-            data: abi.encodeCall(ReceiverAliasedAddress.receiveFromAliasedAddress, (originChainid, stateRoot))
+            data: abi.encodeCall(ReceiverAliasedAddress.receiveFromAliasedAddress, (originChainid, treeRoot))
         });
     }
 
-    /// @notice Sends the Keystore tree state root back to L1.
+    /// @notice Sends the local Keystore tree root back to L1.
     ///
-    /// @param chainid The chain id key to look up the Keystore state root to send. If `chainid` is 0, the local state
-    ///                root is sent.
-    function sendFromArbitrumToL1(uint256 chainid) external {
-        (uint256 originChainid, bytes32 stateRoot) =
-            chainid == 0 ? (block.chainid, localStateRoot()) : (chainid, receivedStateRoots[chainid]);
-
+    /// @dev Only withdrawals from Arbitrum (and not its L3s) are supported as the targeted `receiveOnL1FromArbitrum`
+    ///      method only works on L1.
+    /// @dev This method does not accept a `chainid` as "withdrawals" to L1 should only ever use the local Keystore tree
+    ///      root (and not a received one).
+    function sendFromArbitrumToL1() external {
         ArbSys(ARBSYS).sendTxToL1({
             destination: address(this),
-            data: abi.encodeCall(KeystoreArbitrumPortal.receiveOnL1FromArbitrum, (originChainid, stateRoot))
+            data: abi.encodeCall(KeystoreArbitrumPortal.receiveOnL1FromArbitrum, (block.chainid, localTreeRoot()))
         });
     }
 
-    /// @notice Receives a Keystore state root sent from Arbitrum.
+    /// @notice Receives a Keystore tree root sent from Arbitrum.
     ///
     /// @param originChainid The origin chain id.
-    /// @param stateRoot The Keystore state root being received.
-    function receiveOnL1FromArbitrum(uint256 originChainid, bytes32 stateRoot) external {
+    /// @param treeRoot The Keystore tree root being received.
+    function receiveOnL1FromArbitrum(uint256 originChainid, bytes32 treeRoot) external {
         // Ensure the tx sender is the Arbitrum Bridge contract.
         IBridge bridge = IInbox(ARBITRUM_INBOX).bridge();
         require(msg.sender == address(bridge), L2ToL1TxSenderIsNotRollupContract());
@@ -76,7 +75,7 @@ contract KeystoreArbitrumPortal is ReceiverAliasedAddress {
         IOutbox outbox = IOutbox(bridge.activeOutbox());
         require(outbox.l2ToL1Sender() == address(this), L2ToL1MsgSenderIsNotThisContract());
 
-        // Register the Keystore state root.
-        receivedStateRoots[originChainid] = stateRoot;
+        // Register the Keystore tree root.
+        receivedTreeRoots[originChainid] = treeRoot;
     }
 }

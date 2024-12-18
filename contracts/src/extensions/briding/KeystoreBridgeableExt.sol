@@ -52,7 +52,7 @@ abstract contract KeystoreBridgeableExt is Keystore {
         bytes32[] calldata siblings
     ) external {
         // Retrieve the received Keystore state root from the bridge.
-        bytes32 receivedStateRoot = KeystoreBridge(keystoreBridge).receivedStateRoots(masterChainId);
+        bytes32 receivedStateRoot = KeystoreBridge(keystoreBridge).receivedTreeRoots(masterChainId);
 
         // Recompute the data hash that was committed in the Keystore state root.
         bytes32 newConfirmedConfigHash = ConfigLib.hash({config: masterConfig, account: address(this)});

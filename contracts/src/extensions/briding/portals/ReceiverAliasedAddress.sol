@@ -12,15 +12,15 @@ contract ReceiverAliasedAddress is KeystoreStateManager {
     //                                        PUBLIC FUNCTIONS                                        //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Receives a Keystore state root sent from an aliased L1 address.
+    /// @notice Receives a Keystore tree root sent from this contract aliased address.
     ///
     /// @param originChainid The origin chain id.
-    /// @param stateRoot_ The state root being received.
-    function receiveFromAliasedAddress(uint256 originChainid, bytes32 stateRoot_) external {
+    /// @param treeRoot The Keystore tree root being received.
+    function receiveFromAliasedAddress(uint256 originChainid, bytes32 treeRoot) external {
         // Ensure the `msg.sender` is the aliased address of this contract.
         require(AddressAliasHelper.undoL1ToL2Alias(msg.sender) == address(this), L1ToL2MsgSenderIsNotThisContract());
 
-        // Register the Keystore state root.
-        receivedStateRoots[originChainid] = stateRoot_;
+        // Register the Keystore tree root.
+        receivedTreeRoots[originChainid] = treeRoot;
     }
 }

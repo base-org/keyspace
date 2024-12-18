@@ -10,8 +10,9 @@ contract KeystoreStateManager {
     //                                            STORAGE                                             //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice The latest received Keystore state root per origin chain id.
-    mapping(uint256 originChainid => bytes32 receivedRoot) public receivedStateRoots;
+    /// @notice The latest received Keystore root per origin chain id.
+    mapping(uint256 originChainid => bytes32 receivedRoot) public receivedTreeRoots;
+    bytes32 public receivedSRoot;
 
     /// @notice Mapping of authority addresses to local Merkle Trees.
     BinaryMerkleTreeLib.Tree private _tree;
@@ -20,11 +21,11 @@ contract KeystoreStateManager {
     //                                        PUBLIC FUNCTIONS                                        //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Retrieves the local Keystore state root.
+    /// @notice Retrieves the local Keystore root.
     ///
-    /// @return The local Keystore state root.
-    function localStateRoot() public view returns (bytes32) {
-        return BinaryMerkleTreeLib.stateRoot({tree: _tree});
+    /// @return The local Keystore root.
+    function localTreeRoot() public view returns (bytes32) {
+        return BinaryMerkleTreeLib.treeRoot({tree: _tree});
     }
 
     /// @notice Commits Keystore configs to the local Merkle Tree.

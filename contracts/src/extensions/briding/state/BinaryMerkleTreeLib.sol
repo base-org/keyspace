@@ -13,30 +13,30 @@ library BinaryMerkleTreeLib {
         /// @dev The number of nodes in the tree.
         uint256 nodeCount;
         /// @dev The tree nodes.
-        mapping(uint256 => mapping(uint256 => bytes32)) nodes;
+        mapping(uint256 depth => mapping(uint256 nodeIndex => bytes32 nodeHash)) nodes;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                        INTERNAL FUNCTIONS                                      //
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Computes the Merkle tree's state root.
+    /// @notice Computes the Merkle tree's root.
     ///
-    /// @dev The state root also includes the depth of the tree.
+    /// @dev The root also includes the depth of the tree.
     ///
     /// @param tree A storage pointer to a `Tree`.
     ///
-    /// @return The Merkle tree's state root.
-    function stateRoot(Tree storage tree) internal view returns (bytes32) {
-        // Include the tree depth in the state root.
+    /// @return The Merkle tree's root.
+    function treeRoot(Tree storage tree) internal view returns (bytes32) {
+        // Include the tree depth in the root.
         uint256 depth = tree.depth;
         return keccak256(abi.encodePacked(depth, tree.nodes[depth][0]));
     }
 
-    /// @notice Commits to the provided `dataHash` by including it in the Merkle tree owned by the sender's address.
+    /// @notice Commits to the given `dataHash` by inserting it into the provided Merkle tree.
     ///
     /// @param tree A storage pointer to a `Tree`.
-    /// @param dataHash The hash of the data to commit.
+    /// @param dataHash The hash of the data to be committed as a new leaf in the Merkle tree.
     function commitTo(Tree storage tree, bytes32 dataHash) internal {
         mapping(uint256 => mapping(uint256 => bytes32)) storage nodes = tree.nodes;
 
@@ -81,7 +81,7 @@ library BinaryMerkleTreeLib {
         bytes32 currentHash = dataHash;
         uint256 depth = siblings.length;
 
-        // Compute the Tree state root.
+        // Compute the Tree's root.
         for (uint256 level; level < depth; level++) {
             bool isLeftNode = _isLeftNode(index);
 
