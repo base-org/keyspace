@@ -1,20 +1,26 @@
 {
-	"name": "keyspace-v3",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
-	"runArgs": [
-		"--name=keyspace-v3"
-	],
-	"customizations": {
-		"vscode": {
-			"extensions": [
-				"eamodio.gitlens",
-				"Gruntfuggly.todo-tree",
-				"NomicFoundation.hardhat-solidity",
-				"rust-lang.rust-analyzer",
-				"tamasfe.even-better-toml"
-			]
-		}
-	}
+  "name": "keyspace-v3",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--name=keyspace-v3"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "eamodio.gitlens",
+        "Gruntfuggly.todo-tree",
+        "NomicFoundation.hardhat-solidity",
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/aws-cli:1": {}
+  }
+}
+"ghcr.io/devcontainers/features/aws-cli:1": {
+  "version": "latest"
 }
