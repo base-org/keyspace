@@ -63,7 +63,7 @@ contract MultiOwnableWalletFactory {
         returns (MultiOwnableWallet account)
     {
         (bool alreadyDeployed, address accountAddress) =
-            LibClone.createDeterministicERC1967(msg.value, implementation, _getSalt({config: config, salt: salt}));
+            LibClone.createDeterministicERC1967(msg.value, implementation, _getSalt(config, salt));
 
         account = MultiOwnableWallet(payable(accountAddress));
 
