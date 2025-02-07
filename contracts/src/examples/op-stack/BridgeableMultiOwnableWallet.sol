@@ -6,7 +6,7 @@ import {KeystoreBridgeableExt} from "../../extensions/bridging/KeystoreBridgeabl
 import {MultiOwnableWallet} from "./MultiOwnableWallet.sol";
 
 contract BridgeableMultiOwnableWallet is MultiOwnableWallet, KeystoreBridgeableExt {
-    constructor(uint256 masterChainid, address keystoreBridge_)
+    constructor(uint256 masterChainId, address keystoreBridge_)
         MultiOwnableWallet(masterChainId)
         KeystoreBridgeableExt(keystoreBridge_)
     {}
