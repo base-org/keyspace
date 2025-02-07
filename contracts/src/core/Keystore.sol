@@ -233,8 +233,8 @@ abstract contract Keystore {
     /// @dev This hook is invoked under different conditions on the master chain and replica chains:
     ///      - On the master chain, it is called when `setConfig` executes successfully.
     ///      - On replica chains, it is called:
-    ///         - whenever a config is mirrored successfully
-    ///         - when syncing a master config, if the list of mirrored configs was reset
+    ///         - whenever a config is set successfully
+    ///         - when syncing a master config, if the replica log was reset
     ///
     /// @param config The Keystore config.
     ///
@@ -249,8 +249,8 @@ abstract contract Keystore {
             return KeystoreStorageLib.sMaster().configHash;
         }
 
-        uint256 mirroredCount = KeystoreStorageLib.sReplica().mirroredConfigHashes.length;
-        return KeystoreStorageLib.sReplica().mirroredConfigHashes[mirroredCount - 1];
+        uint256 replicaLogCount = KeystoreStorageLib.sReplica().replicaLog.length;
+        return KeystoreStorageLib.sReplica().replicaLog[replicaLogCount - 1];
     }
 
     /// @notice Initializes the Keystore.
@@ -268,7 +268,7 @@ abstract contract Keystore {
         } else {
             require(KeystoreStorageLib.sReplica().masterConfigHash == 0, KeystoreAlreadyInitialized());
             KeystoreStorageLib.sReplica().masterConfigHash = configHash;
-            KeystoreStorageLib.sReplica().mirroredConfigHashes.push(configHash);
+            KeystoreStorageLib.sReplica().replicaLog.push(configHash);
         }
 
         // Call the apply config hook.
@@ -285,16 +285,16 @@ abstract contract Keystore {
         ConfigLib.Config calldata masterConfig,
         uint256 masterBlockTimestamp
     ) internal {
-        // Ensure the mirrored configs list are valid, given the master config hash.
-        bool wasMirroredListReset =
-            _ensureMirroredConfigsAreValid({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfig.nonce});
+        // Ensure the replica log is valid, given the master config hash.
+        bool wasReplicaLogReset =
+            _ensureReplicaLogIsValid({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfig.nonce});
 
         // Store the master config in the Keystore internal storage.
         KeystoreStorageLib.sReplica().masterConfigHash = masterConfigHash;
         KeystoreStorageLib.sReplica().masterBlockTimestamp = masterBlockTimestamp;
 
-        // Run the apply config hook logic if the mirrored configs list was reset.
-        if (wasMirroredListReset) {
+        // Run the apply config hook logic if the replica log was reset.
+        if (wasReplicaLogReset) {
             _hookApplyConfig({config: masterConfig});
         }
     }
@@ -323,63 +323,60 @@ abstract contract Keystore {
     /// @return The config hash.
     function _setReplicaConfig(ConfigLib.Config calldata config) private returns (bytes32) {
         bytes32 configHash = ConfigLib.hash({config: config, account: address(this)});
-        _setMirroredConfig({mirroredConfigHash: configHash, mirroredConfigNonce: config.nonce});
+        _applyReplicaConfig({configHash: configHash, configNonce: config.nonce});
 
         return configHash;
     }
 
-    /// @notice Ensures that the mirrored configs are valid given the provided `masterConfigHash`.
+    /// @notice Ensures that the replica log is valid given the provided `masterConfigHash`.
     ///
     /// @param masterConfigHash The master config hash.
     /// @param masterConfigNonce The master config nonce.
     ///
-    /// @return wasMirroredListReset True if the mirrored configs list has been reset, false otherwise.
-    function _ensureMirroredConfigsAreValid(bytes32 masterConfigHash, uint256 masterConfigNonce)
+    /// @return wasReplicaLogReset True if the replica log has been reset, false otherwise.
+    function _ensureReplicaLogIsValid(bytes32 masterConfigHash, uint256 masterConfigNonce)
         private
-        returns (bool wasMirroredListReset)
+        returns (bool wasReplicaLogReset)
     {
-        // Get a storage reference to the Keystore mirrored configs list.
-        bytes32[] storage mirroredConfigHashes = KeystoreStorageLib.sReplica().mirroredConfigHashes;
+        // Get a storage reference to the Keystore replica log.
+        bytes32[] storage replicaLog = KeystoreStorageLib.sReplica().replicaLog;
 
-        // If the master config has a nonce above our current config, reset the mirrored configs list.
+        // If the master config has a nonce above our current config, reset the replica log.
         uint256 currentConfigNonce = KeystoreStorageLib.sReplica().currentConfigNonce;
         if (masterConfigNonce > currentConfigNonce) {
-            _resetMirroredConfigs({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfigNonce});
+            _resetReplicaLog({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfigNonce});
             return true;
         }
 
-        // Otherwise, the mirrored configs list MUST already include the master config hash. If it does not,
-        // reset it.
+        // Otherwise, the replica log MUST already include the master config hash. If it does not, reset it.
 
-        // Using the nonce difference, compute the index where the master config hash should appear in the
-        // mirrored configs list.
-        // NOTE: This is possible because, each mirrored config nonce strictly increments by one from the
-        //       previous config nonce.
+        // Using the nonce difference, compute the index where the master config hash should appear in the replica log.
+        // NOTE: This is possible because, each config nonce strictly increments by one from the previous config nonce.
         uint256 nonceDiff = currentConfigNonce - masterConfigNonce;
-        uint256 masterConfigHashIndex = mirroredConfigHashes.length - 1 - nonceDiff;
+        uint256 masterConfigHashIndex = replicaLog.length - 1 - nonceDiff;
 
-        // If the master config hash is not found at that index, reset the mirrored configs list.
-        if (mirroredConfigHashes[masterConfigHashIndex] != masterConfigHash) {
-            _resetMirroredConfigs({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfigNonce});
+        // If the master config hash is not found at that index, reset the replica log.
+        if (replicaLog[masterConfigHashIndex] != masterConfigHash) {
+            _resetReplicaLog({masterConfigHash: masterConfigHash, masterConfigNonce: masterConfigNonce});
             return true;
         }
     }
 
-    /// @notice Resets the mirrored configs.
+    /// @notice Resets the replica log.
     ///
     /// @param masterConfigHash The master config hash to start form.
     /// @param masterConfigNonce The master config nonce.
-    function _resetMirroredConfigs(bytes32 masterConfigHash, uint256 masterConfigNonce) private {
-        delete KeystoreStorageLib.sReplica().mirroredConfigHashes;
-        _setMirroredConfig({mirroredConfigHash: masterConfigHash, mirroredConfigNonce: masterConfigNonce});
+    function _resetReplicaLog(bytes32 masterConfigHash, uint256 masterConfigNonce) private {
+        delete KeystoreStorageLib.sReplica().replicaLog;
+        _applyReplicaConfig({configHash: masterConfigHash, configNonce: masterConfigNonce});
     }
 
-    /// @notice Sets a mirrored config.
+    /// @notice Sets a replica config.
     ///
-    /// @param mirroredConfigHash The mirrored config hash.
-    /// @param mirroredConfigNonce The mirrored config nonce.
-    function _setMirroredConfig(bytes32 mirroredConfigHash, uint256 mirroredConfigNonce) private {
-        KeystoreStorageLib.sReplica().mirroredConfigHashes.push(mirroredConfigHash);
-        KeystoreStorageLib.sReplica().currentConfigNonce = mirroredConfigNonce;
+    /// @param configHash The config hash.
+    /// @param configNonce The config nonce.
+    function _applyReplicaConfig(bytes32 configHash, uint256 configNonce) private {
+        KeystoreStorageLib.sReplica().replicaLog.push(configHash);
+        KeystoreStorageLib.sReplica().currentConfigNonce = configNonce;
     }
 }

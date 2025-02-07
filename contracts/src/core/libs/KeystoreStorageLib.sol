@@ -42,13 +42,13 @@ library KeystoreStorageLib {
         bytes32 masterConfigHash;
         /// @dev The timestamp of the L1 block used to sync the latest `masterConfig`.
         uint256 masterBlockTimestamp;
-        /// @dev The latest mirrored config nonce.
+        /// @dev The nonce of the latest Keystore config set on the replica chain.
         uint256 currentConfigNonce;
-        /// @dev Mirrored Keystore config hashes.
-        ///      NOTE: The mirrored configs list can NEVER be empty because:
+        /// @dev List of Keystore config hashes that have been set on the replica chain.
+        ///      NOTE: This list can NEVER be empty because:
         ///         1. It is initialized in the `_initialize()` method.
         ///         2. If reset in `syncConfig()`, the newly synced master config hash is immediately pushed into it.
-        bytes32[] mirroredConfigHashes;
+        bytes32[] replicaLog;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
